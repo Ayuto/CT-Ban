@@ -17,4 +17,5 @@ A menu should appear that allows you to:
 4. Unban player
 
 Type ``!is_banned <playername | id>`` in the chat to check if a player is banned or not.
+
 Example: ``!is_banned Ayuto`` or with an id ``!is_banned #2``
