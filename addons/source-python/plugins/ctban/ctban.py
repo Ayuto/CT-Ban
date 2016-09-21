@@ -27,6 +27,8 @@ from messages import SayText2, TextMsg
 from colors import RED
 from engines.sound import Sound
 
+from translations.strings import LangStrings
+
 
 
 # ==============================================================================
@@ -62,6 +64,9 @@ MESSAGE_PREFIX_TEXTMSG = '[CTBAN] '
 
 # Sound file to play, relative to sound/
 SOUND_FILE = "buttons/button11.wav"
+
+# Language strings
+TRANS_LANG = LangStrings("ctban")
 
 # ==============================================================================
 # >> CLASSES
