@@ -66,7 +66,7 @@ MESSAGE_PREFIX_TEXTMSG = '[CTBAN] '
 SOUND_FILE = "buttons/button11.wav"
 
 # Language strings
-TRANS_LANG = LangStrings("ctban")
+TRANS = LangStrings("ctban")
 
 # ==============================================================================
 # >> CLASSES
@@ -161,12 +161,12 @@ def on_level_end():
 # ==============================================================================
 admin_ban_menu = PagedMenu(
     [
-        PagedOption('Ban CT', 1),
-        PagedOption('Ban leaver', 2),
-        PagedOption('Ban freekiller', 3),
-        PagedOption('Unban player', 4)
+        PagedOption(TRANS['menu:ban'], 1),
+        PagedOption(TRANS['menu:ban_leaver'], 2),
+        PagedOption(TRANS['menu:ban_freekiller'], 3),
+        PagedOption(TRANS['menu:unban_freekiller'], 4)
     ],
-    title='CTBAN'
+    title=TRANS['menu:title']
 )
 
 
@@ -186,16 +186,16 @@ def on_admin_ban_menu_select(menu, index, option):
 # >> PLAYER MENU
 # ==============================================================================
 ct_menu = PagedMenu(
-    title='Ban CT',
+    title=TRANS['menu:ban'],
     parent_menu=admin_ban_menu)
 
 freekillers_menu = PagedMenu(
-    title='Ban freekiller',
+    title=TRANS['menu:ban_freekiller'],
     parent_menu=admin_ban_menu
 )
 
 leaver_menu = PagedMenu(
-    title='Ban leaver',
+    title=TRANS['menu:ban_leaver'],
     parent_menu=admin_ban_menu
 )
 
@@ -246,9 +246,8 @@ def on_unban_menu_build(menu, index):
 def on_unban_menu_select(menu, index, option):
     ban_time, name = ban_system.remove_ban(option.value)
     if ban_time is not None:
-        SayText2(
-            MESSAGE_PREFIX + '{} has been unbanned from the CT team.'.format(
-                name)).send()
+        SayText2(TRANS['player_unbanned']).send(
+            index)
 
 
 # ==============================================================================
@@ -266,9 +265,7 @@ def create_ban_time_menu(parent_menu, uniqueid, name):
 def on_ban_time_menu_select(menu, index, option):
     uniqueid, name, duration = option.value
     ban_system.add_ban(uniqueid, duration, name)
-    SayText2(
-        MESSAGE_PREFIX + '{} has been banned from the CT team ({}).'.format(
-            name, option.text)).send()
+    SayText2(TRANS['player_banned']).send()
 
 
 # ==============================================================================
@@ -288,29 +285,23 @@ def command_is_banned(info, target):
         try:
             player = Player.from_userid(int(target[1:]))
         except:
-            SayText2(MESSAGE_PREFIX + "Sorry, can't find player \x03{player_name}\x01".format(
-                player_name=target
-            )).send(info.index)
+            SayText2(TRANS['player_not_found']).send(info.index)
             return CommandReturn.BLOCK
     else:
         try:
             index = index_from_name(target)
             player = Player(index)
         except ValueError:
-            SayText2(MESSAGE_PREFIX + "Sorry, can't find player \x03{player_name}\x01".format(
-                player_name=target
-            )).send(info.index)
+            SayText2(TRANS['player_not_found']).send(info.index)
             return CommandReturn.BLOCK
     uid = uniqueid_from_index(player.index)
     is_banned = ban_system.is_banned(uid)
     if is_banned:
-        result = "Player \x03{name}\x01 is CT-Banned."
+        result = TRANS['player_is_banned']
     else:
-        result = "Player \x03{name}\x01 is not CT-Banned."
+        result = TRANS['player_not_banned']
 
-    SayText2(MESSAGE_PREFIX + result.format(
-        name=player.name
-    )).send(info.index)
+    SayText2(result).send(info.index)
 
     return CommandReturn.BLOCK
 
@@ -352,6 +343,5 @@ def on_client_command(command, index):
 
     sound = Sound(SOUND_FILE)
     sound.play()
-    TextMsg(
-        MESSAGE_PREFIX_TEXTMSG + 'You are banned from the CT team.').send(index)
+    TextMsg(TRANS['player_banned_enforce']).send(index)
     return CommandReturn.BLOCK
