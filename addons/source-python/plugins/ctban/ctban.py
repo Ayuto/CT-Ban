@@ -19,11 +19,13 @@ from players.helpers import uniqueid_from_index
 from players.helpers import index_from_uniqueid
 from players.helpers import index_from_name
 
+from messages import SayText2
+from messages import TextMsg
+
 from listeners import OnLevelEnd
 from paths import CUSTOM_DATA_PATH
 from events import Event
 from filters.players import PlayerIter
-from messages import SayText2, TextMsg
 from colors import RED
 from engines.sound import Sound
 
@@ -34,6 +36,7 @@ from translations.strings import LangStrings
 # ==============================================================================
 # >> CONSTANTS
 # ==============================================================================
+# TODO Create a config file for (most of) these constants
 # Ban durations
 DURATIONS = {
     0: 'permanently',
@@ -59,20 +62,21 @@ TRACKED_LEAVERS_NO = 5
 TRACKED_FREEKILLERS_NO = 5
 
 # Prefix for messages
-MESSAGE_PREFIX = '{}[CTBAN] \1'.format(RED)
-MESSAGE_PREFIX_TEXTMSG = '[CTBAN] '
+MESSAGE_PREFIX = '{}[CT Ban]\1'.format(RED)
 
 # Sound file to play, relative to sound/
-SOUND_FILE = "buttons/button11.wav"
+SOUND_FILE = Sound('buttons/button11.wav')
 
-# Language strings
-TRANS = LangStrings("ctban")
+# Translation strings
+TRANS = LangStrings('ctban')
+
 
 # ==============================================================================
 # >> CLASSES
 # ==============================================================================
 class BanSystem(dict):
     def __init__(self):
+        """Initialize the ban system by loading the ban database (if existant)."""
         self.leavers = collections.deque(maxlen=TRACKED_LEAVERS_NO)
         self.freekillers = collections.deque(maxlen=TRACKED_FREEKILLERS_NO)
         try:
@@ -82,6 +86,7 @@ class BanSystem(dict):
             pass
 
     def save(self):
+        """Write all bans to the database file."""
         try:
             BAN_DATABASE.parent.makedirs()
         except FileExistsError:
@@ -91,6 +96,15 @@ class BanSystem(dict):
             pickle.dump(self, f)
 
     def add_ban(self, uniqueid, duration, name):
+        """Add a ban.
+        
+        :param str uniqueid:
+            Unique ID of the player that should receive a ban.
+        :param int duration:
+            Duration of the ban in seconds. Use 0 for a permanent ban.
+        :param str name:
+            Name of the player to ban.
+        """
         self[uniqueid] = (0 if duration == 0 else time.time() + duration, name)
         try:
             index = index_from_uniqueid(uniqueid)
@@ -111,6 +125,12 @@ class BanSystem(dict):
             pass
 
     def is_banned(self, uniqueid):
+        """Return True if the given unique ID is banned.
+        
+        :param str uniqueid:
+            Unique ID of the player that should be checked.
+        :rtype: bool
+        """
         try:
             ban_time, name = self[uniqueid]
         except KeyError:
@@ -119,9 +139,18 @@ class BanSystem(dict):
         return ban_time == 0 or time.time() < ban_time
 
     def remove_ban(self, uniqueid):
+        """Remove the ban from the given unique ID.
+        
+        :param str uniqueid:
+            Unique ID of the player that should be unbanned.
+        :return:
+            Ban duration and the name of the player or (None, None).
+        :rtype: tuple
+        """
         return self.pop(uniqueid, (None, None))
 
     def cleanup(self):
+        """Remove all bans that expired and save the database."""
         now = time.time()
         for uniqueid, (ban_time, name) in tuple(self.items()):
             if ban_time != 0 and now >= ban_time:
@@ -130,6 +159,13 @@ class BanSystem(dict):
         self.save()
 
     def track_leaver(self, uniqueid, name):
+        """Add a leaver to the tracking list for leavers.
+        
+        :param str uniqueid:
+            Unique ID of the player to track.
+        :param str name:
+            Name of the player to track.
+        """
         if self.is_banned(uniqueid):
             return
 
@@ -138,6 +174,13 @@ class BanSystem(dict):
             self.leavers.append(data)
 
     def track_freekiller(self, uniqueid, name):
+        """Add a freekiller to the tracking list for freekillers.
+        
+        :param str uniqueid:
+            Unique ID of the player to track.
+        :param str name:
+            Name of the player to track.
+        """
         if self.is_banned(uniqueid):
             return
 
@@ -159,12 +202,13 @@ def on_level_end():
 # ==============================================================================
 # >> ADMIN BAN MENU
 # ==============================================================================
+# TODO: Add permissions for each of these entries
 admin_ban_menu = PagedMenu(
     [
-        PagedOption(TRANS['menu:ban'], 1),
-        PagedOption(TRANS['menu:ban_leaver'], 2),
-        PagedOption(TRANS['menu:ban_freekiller'], 3),
-        PagedOption(TRANS['menu:unban_freekiller'], 4)
+        PagedOption(TRANS['menu:ban'], lambda: ct_menu),
+        PagedOption(TRANS['menu:ban_leaver'], lambda: leaver_menu),
+        PagedOption(TRANS['menu:ban_freekiller'], lambda: freekillers_menu),
+        PagedOption(TRANS['menu:unban_player'], lambda: unban_menu)
     ],
     title=TRANS['menu:title']
 )
@@ -172,14 +216,7 @@ admin_ban_menu = PagedMenu(
 
 @admin_ban_menu.register_select_callback
 def on_admin_ban_menu_select(menu, index, option):
-    if option.value == 1:
-        return ct_menu
-    elif option.value == 2:
-        return leaver_menu
-    elif option.value == 3:
-        return freekillers_menu
-    elif option.value == 4:
-        return unban_menu
+    return option.value()
 
 
 # ==============================================================================
@@ -231,7 +268,7 @@ def on_active_player_menu_select(menu, index, option):
 # >> UNBAN MENU
 # ==============================================================================
 unban_menu = PagedMenu(
-    title='Unban player',
+    title=TRANS['menu:unban_player'],
     parent_menu=admin_ban_menu)
 
 @unban_menu.register_build_callback
@@ -246,15 +283,17 @@ def on_unban_menu_build(menu, index):
 def on_unban_menu_select(menu, index, option):
     ban_time, name = ban_system.remove_ban(option.value)
     if ban_time is not None:
-        SayText2(TRANS['player_unbanned']).send(
-            index)
+        SayText2(TRANS['player:remove_ban']).send(
+            index, prefix=MESSAGE_PREFIX, name=name)
 
 
 # ==============================================================================
 # >> BAN TIME MENU
 # ==============================================================================
 def create_ban_time_menu(parent_menu, uniqueid, name):
-    ban_time_menu = PagedMenu(title='Ban time', parent_menu=parent_menu)
+    ban_time_menu = PagedMenu(
+        title=TRANS['menu:ban_time'], parent_menu=parent_menu)
+        
     for duration, display_name in sorted(DURATIONS.items()):
         ban_time_menu.append(
             PagedOption(display_name, (uniqueid, name, duration)))
@@ -265,46 +304,9 @@ def create_ban_time_menu(parent_menu, uniqueid, name):
 def on_ban_time_menu_select(menu, index, option):
     uniqueid, name, duration = option.value
     ban_system.add_ban(uniqueid, duration, name)
-    SayText2(TRANS['player_banned']).send()
+    SayText2(TRANS['player:add_ban']).send(prefix=MESSAGE_PREFIX, name=name)
 
-
-# ==============================================================================
-# >> SAY COMMANDS
-# ==============================================================================
-@TypedSayCommand('!ctban', 'ctban.open')
-def on_ctban_open(info):
-    admin_ban_menu.send(info.index)
-    return CommandReturn.BLOCK
-
-
-# todo: Return more info
-@TypedSayCommand('!is_banned', 'ctban.open')
-def command_is_banned(info, target):
-    target_start = target[0:1]
-    if target_start is '#':
-        try:
-            player = Player.from_userid(int(target[1:]))
-        except:
-            SayText2(TRANS['player_not_found']).send(info.index)
-            return CommandReturn.BLOCK
-    else:
-        try:
-            index = index_from_name(target)
-            player = Player(index)
-        except ValueError:
-            SayText2(TRANS['player_not_found']).send(info.index)
-            return CommandReturn.BLOCK
-    uid = uniqueid_from_index(player.index)
-    is_banned = ban_system.is_banned(uid)
-    if is_banned:
-        result = TRANS['player_is_banned']
-    else:
-        result = TRANS['player_not_banned']
-
-    SayText2(result).send(info.index)
-
-    return CommandReturn.BLOCK
-
+    
 # ==============================================================================
 # >> EVENTS
 # ==============================================================================
@@ -328,7 +330,6 @@ def on_player_death(event):
     ban_system.track_freekiller(attacker.uniqueid, attacker.name)
 
 
-# todo: re-display team menu
 @ClientCommandFilter
 def on_client_command(command, index):
     if command[0].lower() != 'jointeam':
@@ -341,7 +342,46 @@ def on_client_command(command, index):
     if not ban_system.is_banned(uniqueid):
         return
 
-    sound = Sound(SOUND_FILE)
-    sound.play()
-    TextMsg(TRANS['player_banned_enforce']).send(index)
+    # TODO: Re-display team selection menu
+    SOUND_FILE.play()
+    TextMsg(TRANS['player:banned']).send(index)
+    return CommandReturn.BLOCK
+
+
+# ==============================================================================
+# >> SAY COMMANDS
+# ==============================================================================
+@TypedSayCommand('!ctban', 'ctban.open')
+def on_ctban_open(info):
+    admin_ban_menu.send(info.index)
+    return CommandReturn.BLOCK
+
+
+# TODO: Display more info
+@TypedSayCommand('!is_banned', 'ctban.is_banned')
+def command_is_banned(info, target):
+    player = None
+    if target.startswith('#'):
+        try:
+            player = Player.from_userid(int(target[1:]))
+        except:
+            pass
+    else:
+        try:
+            player = Player(index_from_name(target))
+        except ValueError:
+            pass
+            
+    if player is None:
+        SayText2(TRANS['player:not_found']).send(
+            info.index, prefix=MESSAGE_PREFIX, name=target)
+        return CommandReturn.BLOCK
+    
+    if ban_system.is_banned(player.uniqueid):
+        msg = 'player:is_banned'
+    else:
+        msg = 'player:not_banned'
+
+    SayText2(TRANS[msg]).send(
+        info.index, prefix=MESSAGE_PREFIX, name=player.name)
     return CommandReturn.BLOCK
