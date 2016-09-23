@@ -150,7 +150,7 @@ class BanSystem(dict):
         return self.pop(uniqueid, (None, None))
 
     def cleanup(self):
-        """Remove all bans that expired and save the database."""
+        """Remove all expired bans and save the database."""
         now = time.time()
         for uniqueid, (ban_time, name) in tuple(self.items()):
             if ban_time != 0 and now >= ban_time:
