@@ -17,13 +17,17 @@ from menus import PagedOption
 from players.entity import Player
 from players.helpers import uniqueid_from_index
 from players.helpers import index_from_uniqueid
+from players.helpers import index_from_name
 
 from listeners import OnLevelEnd
 from paths import CUSTOM_DATA_PATH
 from events import Event
 from filters.players import PlayerIter
-from messages import SayText2
+from messages import SayText2, TextMsg
 from colors import RED
+from engines.sound import Sound
+
+from translations.strings import LangStrings
 
 
 
@@ -56,7 +60,13 @@ TRACKED_FREEKILLERS_NO = 5
 
 # Prefix for messages
 MESSAGE_PREFIX = '{}[CTBAN] \1'.format(RED)
+MESSAGE_PREFIX_TEXTMSG = '[CTBAN] '
 
+# Sound file to play, relative to sound/
+SOUND_FILE = "buttons/button11.wav"
+
+# Language strings
+TRANS = LangStrings("ctban")
 
 # ==============================================================================
 # >> CLASSES
@@ -151,13 +161,14 @@ def on_level_end():
 # ==============================================================================
 admin_ban_menu = PagedMenu(
     [
-        PagedOption('Ban CT', 1),
-        PagedOption('Ban leaver', 2),
-        PagedOption('Ban freekiller', 3),
-        PagedOption('Unban player', 4)
+        PagedOption(TRANS['menu:ban'], 1),
+        PagedOption(TRANS['menu:ban_leaver'], 2),
+        PagedOption(TRANS['menu:ban_freekiller'], 3),
+        PagedOption(TRANS['menu:unban_freekiller'], 4)
     ],
-    title='CTBAN'
+    title=TRANS['menu:title']
 )
+
 
 @admin_ban_menu.register_select_callback
 def on_admin_ban_menu_select(menu, index, option):
@@ -175,16 +186,16 @@ def on_admin_ban_menu_select(menu, index, option):
 # >> PLAYER MENU
 # ==============================================================================
 ct_menu = PagedMenu(
-    title='Ban CT',
+    title=TRANS['menu:ban'],
     parent_menu=admin_ban_menu)
 
 freekillers_menu = PagedMenu(
-    title='Ban freekiller',
+    title=TRANS['menu:ban_freekiller'],
     parent_menu=admin_ban_menu
 )
 
 leaver_menu = PagedMenu(
-    title='Ban leaver',
+    title=TRANS['menu:ban_leaver'],
     parent_menu=admin_ban_menu
 )
 
@@ -235,9 +246,8 @@ def on_unban_menu_build(menu, index):
 def on_unban_menu_select(menu, index, option):
     ban_time, name = ban_system.remove_ban(option.value)
     if ban_time is not None:
-        SayText2(
-            MESSAGE_PREFIX + '{} has been unbanned from the CT team.'.format(
-                name)).send()
+        SayText2(TRANS['player_unbanned']).send(
+            index)
 
 
 # ==============================================================================
@@ -255,9 +265,7 @@ def create_ban_time_menu(parent_menu, uniqueid, name):
 def on_ban_time_menu_select(menu, index, option):
     uniqueid, name, duration = option.value
     ban_system.add_ban(uniqueid, duration, name)
-    SayText2(
-        MESSAGE_PREFIX + '{} has been banned from the CT team ({}).'.format(
-            name, option.text)).send()
+    SayText2(TRANS['player_banned']).send()
 
 
 # ==============================================================================
@@ -269,6 +277,34 @@ def on_ctban_open(info):
     return CommandReturn.BLOCK
 
 
+# todo: Return more info
+@TypedSayCommand('!is_banned', 'ctban.open')
+def command_is_banned(info, target):
+    target_start = target[0:1]
+    if target_start is '#':
+        try:
+            player = Player.from_userid(int(target[1:]))
+        except:
+            SayText2(TRANS['player_not_found']).send(info.index)
+            return CommandReturn.BLOCK
+    else:
+        try:
+            index = index_from_name(target)
+            player = Player(index)
+        except ValueError:
+            SayText2(TRANS['player_not_found']).send(info.index)
+            return CommandReturn.BLOCK
+    uid = uniqueid_from_index(player.index)
+    is_banned = ban_system.is_banned(uid)
+    if is_banned:
+        result = TRANS['player_is_banned']
+    else:
+        result = TRANS['player_not_banned']
+
+    SayText2(result).send(info.index)
+
+    return CommandReturn.BLOCK
+
 # ==============================================================================
 # >> EVENTS
 # ==============================================================================
@@ -276,6 +312,7 @@ def on_ctban_open(info):
 def on_player_disconnect(event):
     player = Player.from_userid(event['userid'])
     ban_system.track_leaver(player.uniqueid, player.name)
+
 
 @Event('player_death')
 def on_player_death(event):
@@ -290,6 +327,8 @@ def on_player_death(event):
 
     ban_system.track_freekiller(attacker.uniqueid, attacker.name)
 
+
+# todo: re-display team menu
 @ClientCommandFilter
 def on_client_command(command, index):
     if command[0].lower() != 'jointeam':
@@ -302,6 +341,7 @@ def on_client_command(command, index):
     if not ban_system.is_banned(uniqueid):
         return
 
-    SayText2(
-        MESSAGE_PREFIX + 'You have been banned from the CT team.').send(index)
+    sound = Sound(SOUND_FILE)
+    sound.play()
+    TextMsg(TRANS['player_banned_enforce']).send(index)
     return CommandReturn.BLOCK
